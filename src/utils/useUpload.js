@@ -9,12 +9,12 @@ function useUpload() {
       if ("file" in input && input.file) {
         const formData = new FormData();
         formData.append("file", input.file);
-        response = await fetch("/_create/api/upload/", {
+        response = await fetch("/api/upload", {
           method: "POST",
           body: formData
         });
       } else if ("url" in input) {
-        response = await fetch("/_create/api/upload/", {
+        response = await fetch("/api/upload", {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -22,7 +22,7 @@ function useUpload() {
           body: JSON.stringify({ url: input.url })
         });
       } else if ("base64" in input) {
-        response = await fetch("/_create/api/upload/", {
+        response = await fetch("/api/upload", {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -30,7 +30,7 @@ function useUpload() {
           body: JSON.stringify({ base64: input.base64 })
         });
       } else {
-        response = await fetch("/_create/api/upload/", {
+        response = await fetch("/api/upload", {
           method: "POST",
           headers: {
             "Content-Type": "application/octet-stream"

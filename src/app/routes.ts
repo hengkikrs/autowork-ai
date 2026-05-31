@@ -147,6 +147,7 @@ const apiRoutes = [
 	route('api/reports/weekly', './api-resource.ts', { id: 'api/reports/weekly' }),
 	route('api/tailor/cover-letter', './api-resource.ts', { id: 'api/tailor/cover-letter' }),
 	route('api/tailor/cv', './api-resource.ts', { id: 'api/tailor/cv' }),
+	route('api/upload', './api-resource.ts', { id: 'api/upload' }),
 ];
 const routes = [...apiRoutes, ...generateRoutes(tree)];
 
