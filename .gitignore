@@ -1,0 +1,12 @@
+.DS_Store
+/node_modules/
+.vitest/
+.env
+.env.*
+!.env.example
+.codex-*.log
+.vercel/
+
+# React Router
+/.react-router/
+/build/
