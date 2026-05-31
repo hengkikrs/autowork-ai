@@ -1,9 +1,14 @@
+import { getAnythingHeaders } from "./headers";
+
 export async function generateJsonWithAI({ system, user, schema }) {
   const response = await fetch(
     `${process.env.NEXT_PUBLIC_CREATE_APP_URL}/integrations/google-gemini-2-5-pro/`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...getAnythingHeaders()
+      },
       body: JSON.stringify({
         messages: [
           { role: "system", content: system },

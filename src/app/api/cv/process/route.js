@@ -1,6 +1,7 @@
 import sql from "@/app/api/utils/sql";
 import { ensureAppUser } from "@/app/api/utils/appUser";
 import { auth } from "@/auth";
+import { getAnythingHeaders } from "@/app/api/utils/headers";
 
 export async function POST(request) {
   try {
@@ -30,7 +31,10 @@ export async function POST(request) {
       `${process.env.NEXT_PUBLIC_CREATE_APP_URL}/integrations/google-gemini-2-5-pro/`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...getAnythingHeaders()
+        },
         body: JSON.stringify({
           messages: [
             {

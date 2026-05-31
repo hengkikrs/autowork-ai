@@ -1,3 +1,5 @@
+import { getAnythingHeaders } from "./headers";
+
 async function upload({
   url,
   buffer,
@@ -6,7 +8,8 @@ async function upload({
   const response = await fetch(`https://api.anything.com/v0/upload`, {
     method: "POST",
     headers: {
-      "Content-Type": buffer ? "application/octet-stream" : "application/json"
+      "Content-Type": buffer ? "application/octet-stream" : "application/json",
+      ...getAnythingHeaders()
     },
     body: buffer ? buffer : JSON.stringify({ base64, url })
   });
