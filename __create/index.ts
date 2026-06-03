@@ -36,6 +36,7 @@ for (const method of ['log', 'info', 'warn', 'error', 'debug'] as const) {
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : undefined,
 });
 const adapter = NeonAdapter(pool);
 

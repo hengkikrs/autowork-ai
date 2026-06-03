@@ -15,16 +15,16 @@ export default function HomePage() {
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <a
-            href="/dashboard"
+            href="/account/signin"
             className="bg-[#2563EB] text-white px-8 py-4 rounded-xl font-bold shadow-lg shadow-blue-900/30 hover:bg-[#1D4ED8] transition-all"
           >
-            Masuk Dashboard
+            Sign In
           </a>
           <a
-            href="/account/signin"
+            href="/account/signup"
             className="bg-white/10 text-white px-8 py-4 rounded-xl font-bold border border-white/20 hover:bg-white/20 transition-all"
           >
-            Sign In
+            Sign Up
           </a>
         </div>
       </div>

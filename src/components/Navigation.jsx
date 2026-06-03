@@ -6,7 +6,9 @@ import {
   PieChart,
   Settings,
   LogOut,
+  Mail,
 } from "lucide-react";
+import useUser from "@/utils/useUser";
 
 const navItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard" },
@@ -18,6 +20,7 @@ const navItems = [
 ];
 
 export default function Navigation() {
+  const { data: user } = useUser();
   // Using window.location.pathname for active state
   const pathname =
     typeof window !== "undefined" ? window.location.pathname : "";
@@ -53,6 +56,14 @@ export default function Navigation() {
       </nav>
 
       <div className="p-4 border-t border-[#1E293B]">
+        {user?.email && (
+          <div className="mb-2 flex items-center space-x-3 rounded-xl px-4 py-2 text-xs font-medium text-[#CBD5E1]">
+            <Mail className="h-4 w-4 text-[#94A3B8]" />
+            <span className="truncate" title={user.email}>
+              {user.email}
+            </span>
+          </div>
+        )}
         <a
           href="/account/logout"
           className="flex items-center space-x-3 rounded-xl px-4 py-3 text-sm font-medium text-[#94A3B8] hover:bg-red-500/10 hover:text-red-400 transition-all"

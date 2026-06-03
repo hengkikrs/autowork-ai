@@ -15,6 +15,7 @@ const pool = process.env.DATABASE_URL
   ? new pg.Pool({
       connectionString: process.env.DATABASE_URL,
       max: Number(process.env.DATABASE_POOL_MAX || 5),
+      ssl: { rejectUnauthorized: false },
     })
   : null;
 
