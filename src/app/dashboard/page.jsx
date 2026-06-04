@@ -1,5 +1,6 @@
 "use client";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Navigation from "@/components/Navigation";
 import {
   FileText,
@@ -15,6 +16,8 @@ import {
   Wand2,
   Send,
   BarChart3,
+  Download,
+  Loader2,
 } from "lucide-react";
 
 async function fetchCVs() {
@@ -58,6 +61,8 @@ function StepIcon({ state }) {
 }
 
 export default function DashboardPage() {
+  const queryClient = useQueryClient();
+  const [autoRepairing, setAutoRepairing] = useState(false);
   const { data: cvResponse, isLoading: loadingCV } = useQuery({
     queryKey: ["cvs"],
     queryFn: fetchCVs,
@@ -75,6 +80,8 @@ export default function DashboardPage() {
   const loading = loadingCV || loadingJobs || loadingApplications;
   const auditResult = cvData?.audit_result || {};
   const atsScore = auditResult?.ats_score || 0;
+  const originalAtsScore = auditResult?.original_ats_score;
+  const optimizedCvUrl = auditResult?.optimized_cv_url || cvData?.file_url;
   const recommendations = auditResult?.recommendations || [];
   const auditReady = Object.keys(auditResult || {}).length > 0;
   const hasCv = Boolean(cvData);
@@ -99,7 +106,13 @@ export default function DashboardPage() {
     ].includes(application.status),
   );
   const hasReportData = applications.length > 0;
-  const needsCvImprovement = auditReady && atsScore < 75;
+  const needsCvImprovement = auditReady && atsScore < 87;
+  const shouldAutoRepair =
+    hasCv &&
+    auditReady &&
+    atsScore < 87 &&
+    !auditResult?.optimized_by_ai &&
+    !autoRepairing;
   const activeStep =
     !hasCv
       ? "upload"
@@ -142,7 +155,9 @@ export default function DashboardPage() {
       title: "Perbaiki CV",
       description: needsCvImprovement
         ? "Ikuti rekomendasi utama sebelum matching."
-        : auditReady
+        : auditResult?.optimized_by_ai
+          ? "CV sudah diperbaiki otomatis dan menjadi CV aktif."
+          : auditReady
           ? "CV sudah cukup untuk mulai matching."
           : "Rekomendasi muncul setelah screening.",
       icon: Wand2,
@@ -192,6 +207,39 @@ export default function DashboardPage() {
       href: "/reports",
     },
   ];
+
+  useEffect(() => {
+    if (!shouldAutoRepair) return;
+
+    let cancelled = false;
+    async function repairCv() {
+      setAutoRepairing(true);
+      try {
+        const response = await fetch("/api/cv/process", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cvId: cvData.id }),
+        });
+        if (!response.ok) {
+          throw new Error("Tidak bisa memperbaiki CV otomatis");
+        }
+        if (!cancelled) {
+          queryClient.invalidateQueries({ queryKey: ["cvs"] });
+        }
+      } catch (error) {
+        console.error(error);
+      } finally {
+        if (!cancelled) {
+          setAutoRepairing(false);
+        }
+      }
+    }
+
+    repairCv();
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldAutoRepair, cvData?.id, queryClient]);
 
   if (loading) {
     return (
@@ -302,6 +350,11 @@ export default function DashboardPage() {
                   <p className="text-4xl font-black text-[#0F172A] mt-2">
                     {atsScore}%
                   </p>
+                  {typeof originalAtsScore === "number" && originalAtsScore !== atsScore && (
+                    <p className="text-xs font-bold text-emerald-700 mt-2">
+                      Dari {originalAtsScore}% setelah auto-improve
+                    </p>
+                  )}
                 </div>
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#E2E8F0]">
                   <p className="text-sm font-bold text-[#64748B]">Lowongan</p>
@@ -337,10 +390,27 @@ export default function DashboardPage() {
                   </h3>
                   <p className="text-[#64748B] text-center mt-2 text-sm">
                     CV kamu{" "}
-                    {atsScore > 70
-                      ? "sudah cukup kuat."
+                    {atsScore >= 87
+                      ? "sudah kuat untuk ATS."
                       : "masih perlu ditingkatkan."}
                   </p>
+                  {autoRepairing && (
+                    <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-2 text-sm font-bold text-[#2563EB]">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Memperbaiki CV otomatis
+                    </div>
+                  )}
+                  {optimizedCvUrl && (
+                    <a
+                      href={optimizedCvUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#2563EB] px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-200 hover:bg-[#1D4ED8]"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download CV ATS terbaru
+                    </a>
+                  )}
                 </div>
 
                 <div className="lg:col-span-2 bg-white p-8 rounded-3xl shadow-sm border border-[#E2E8F0]">

@@ -9,6 +9,23 @@ import {
   Loader2,
 } from "lucide-react";
 
+async function extractPdfTextIfAvailable(file) {
+  const isPdf =
+    file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+
+  if (!isPdf || typeof window === "undefined") {
+    return "";
+  }
+
+  try {
+    const { extractTextFromPDF } = await import("@/client-integrations/pdfjs");
+    return (await extractTextFromPDF(file)) || "";
+  } catch (error) {
+    console.warn("PDF text extraction failed:", error);
+    return "";
+  }
+}
+
 export default function UploadCVPage() {
   const [upload, { loading: uploading }] = useUpload();
   const [processing, setProcessing] = useState(false);
@@ -41,14 +58,17 @@ export default function UploadCVPage() {
           return;
         }
 
+        setProcessing(true);
+        const extractedText = await extractPdfTextIfAvailable(file);
+        const rawText = rawTextInput.trim()
+          ? rawTextInput.trim()
+          : extractedText?.trim()
+            ? extractedText.trim()
+            : `File uploaded: ${file.name}. User has not pasted CV text yet, so extract only safe metadata and mark missing sections clearly.`;
+
         const { url, error: uploadError } = await upload({ file });
         if (uploadError) throw new Error(uploadError);
         if (!url) throw new Error("Upload berhasil tapi URL file tidak tersedia.");
-
-        setProcessing(true);
-        const rawText = rawTextInput.trim()
-          ? rawTextInput.trim()
-          : `File uploaded: ${file.name}. User has not pasted CV text yet, so extract only safe metadata and mark missing sections clearly.`;
 
         const saveRes = await fetch("/api/cv", {
           method: "POST",
