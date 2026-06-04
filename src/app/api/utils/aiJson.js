@@ -1,4 +1,4 @@
-import { getAnythingHeaders } from "./headers";
+import { generateOpenRouterJson } from "./openRouter";
 
 const KEYWORDS = [
   "javascript",
@@ -175,39 +175,19 @@ function buildFallbackResult({ schema, user }) {
 
 export async function generateJsonWithAI({ system, user, schema }) {
   try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_CREATE_APP_URL}/integrations/google-gemini-2-5-pro/`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAnythingHeaders()
-        },
-        body: JSON.stringify({
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: user },
-          ],
-          json_schema: schema,
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error(
-        `AI request failed with [${response.status}] ${response.statusText}`,
-      );
-    }
-
-    const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
-
-    if (!content) {
-      throw new Error("AI response did not include content");
-    }
-
-    return JSON.parse(content);
+    const { json } = await generateOpenRouterJson({
+      schema,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      maxTokens: 5000,
+    });
+    return json;
   } catch (error) {
+    if (process.env.AI_FALLBACK_ENABLED !== "true") {
+      throw error;
+    }
     console.info("AI JSON fallback used:", error?.message || error);
     return buildFallbackResult({ schema, user });
   }

@@ -86,7 +86,8 @@ export default function UploadCVPage() {
           body: JSON.stringify({ cvId: cv.id }),
         });
         if (!processRes.ok) {
-          throw new Error("Tidak bisa memproses CV");
+          const processError = await processRes.json().catch(() => ({}));
+          throw new Error(processError.error || "Tidak bisa memproses CV");
         }
 
         if (typeof window !== "undefined") {

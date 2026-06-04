@@ -1,7 +1,11 @@
 import sql from "@/app/api/utils/sql";
 import { ensureAppUser } from "@/app/api/utils/appUser";
 import upload from "@/app/api/utils/upload";
-import { processCvForAts } from "@/app/api/utils/cvAts";
+import { processCvWithOpenRouter } from "@/app/api/utils/cvOpenRouter";
+import {
+  extractTextFromStoredCvFile,
+  looksLikePlaceholderCvText,
+} from "@/app/api/utils/cvFileText";
 import { auth } from "@/auth";
 
 function buildOptimizedFileName(cvId) {
@@ -33,9 +37,30 @@ export async function POST(request) {
     }
 
     const cv = rows[0];
-    const result = processCvForAts(cv.raw_text || "");
+    const extracted = await extractTextFromStoredCvFile({
+      fileUrl: cv.file_url,
+      authUserId: session.user.id,
+    });
+    let sourceText = cv.raw_text || "";
+    if (
+      extracted.text &&
+      (looksLikePlaceholderCvText(cv.raw_text) ||
+        extracted.text.length > String(cv.raw_text || "").length)
+    ) {
+      sourceText = extracted.text;
+    }
+
+    const result = await processCvWithOpenRouter({
+      rawText: sourceText,
+      fileName: extracted.file?.file_name || "",
+      userId: session.user.id,
+    });
     let activeFileUrl = cv.file_url;
     let optimizedFile = null;
+
+    result.audit_result.source_file_name = extracted.file?.file_name || null;
+    result.audit_result.source_text_extracted = Boolean(extracted.text);
+    result.audit_result.source_text_extraction_reason = extracted.reason;
 
     if (result.needsOptimization) {
       optimizedFile = await upload({
@@ -68,7 +93,10 @@ export async function POST(request) {
           ${JSON.stringify({
             original_score: result.audit_result.original_ats_score,
             ats_score: result.audit_result.ats_score,
+            optimized_score: result.audit_result.optimized_ats_score,
             recommendations: result.audit_result.recommendations,
+            ai_provider: result.audit_result.ai_provider,
+            ai_model: result.audit_result.ai_model,
           })}::jsonb,
           ${optimizedFile.url}
         )
@@ -77,7 +105,7 @@ export async function POST(request) {
 
     const parsedJson = JSON.stringify(result.parsed_json || {});
     const auditJson = JSON.stringify(result.audit_result || {});
-    const finalRawText = result.needsOptimization ? result.improvedText : cv.raw_text;
+    const finalRawText = result.needsOptimization ? result.improvedText : sourceText;
 
     await sql`
       UPDATE cvs
@@ -99,6 +127,15 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error("CV Processing Error:", error);
+    if (error?.code === "OPENROUTER_NOT_CONFIGURED") {
+      return Response.json(
+        {
+          error:
+            "OpenRouter belum dikonfigurasi. Set OPENROUTER_API_KEY di Vercel Environment Variables.",
+        },
+        { status: 503 },
+      );
+    }
     return Response.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
