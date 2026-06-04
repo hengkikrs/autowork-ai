@@ -89,3 +89,59 @@ export async function generateOpenRouterJson({
     usage: data?.usage || null,
   };
 }
+
+export async function generateOpenRouterText({
+  messages,
+  model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL,
+  temperature = 0.4,
+  maxTokens = 1200,
+  userId,
+}) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    const error = new Error("OPENROUTER_API_KEY is not configured.");
+    error.code = "OPENROUTER_NOT_CONFIGURED";
+    throw error;
+  }
+
+  const response = await fetch(OPENROUTER_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer":
+        process.env.OPENROUTER_SITE_URL ||
+        process.env.NEXTAUTH_URL ||
+        "https://autowork-ai.vercel.app",
+      "X-OpenRouter-Title": "AutoWork AI",
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature,
+      max_tokens: maxTokens,
+      user: userId,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    const error = new Error(
+      `OpenRouter request failed with ${response.status}: ${body.slice(0, 500)}`,
+    );
+    error.status = response.status;
+    throw error;
+  }
+
+  const data = await response.json();
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error("OpenRouter response did not include message content.");
+  }
+
+  return {
+    text: String(content).trim(),
+    model: data?.model || model,
+    usage: data?.usage || null,
+  };
+}

@@ -121,6 +121,7 @@ const apiRoutes = [
 		id: 'api/__create/check-social-secrets',
 	}),
 	route('api/__create/ssr-test', './api-resource.ts', { id: 'api/__create/ssr-test' }),
+	route('api/ai', './api-resource.ts', { id: 'api/ai' }),
 	route('api/applications', './api-resource.ts', { id: 'api/applications' }),
 	route('api/apply/prepare', './api-resource.ts', { id: 'api/apply/prepare' }),
 	route('api/auth/callback/:provider', './auth-resource.ts', {

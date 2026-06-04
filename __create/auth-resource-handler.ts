@@ -114,5 +114,32 @@ app.all('/api/auth/:action', authHandler());
 app.all('/api/auth/:action/:provider', authHandler());
 
 export async function handleAuthRequest(request: Request) {
+	const url = new URL(request.url);
+	const action = url.pathname.split('/').filter(Boolean).at(2);
+
+	if (!process.env.AUTH_SECRET) {
+		if (action === 'session') {
+			return Response.json(null);
+		}
+
+		return Response.json(
+			{
+				error:
+					'Auth belum dikonfigurasi. Set AUTH_SECRET sebelum memakai login atau signup.',
+			},
+			{ status: 503 }
+		);
+	}
+
+	if (!process.env.DATABASE_URL && ['callback', 'signin'].includes(action || '')) {
+		return Response.json(
+			{
+				error:
+					'Database belum dikonfigurasi. Set DATABASE_URL sebelum memakai login atau signup.',
+			},
+			{ status: 503 }
+		);
+	}
+
 	return app.fetch(request);
 }

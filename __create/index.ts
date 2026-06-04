@@ -88,7 +88,7 @@ if (process.env.AUTH_SECRET) {
   app.use(
     '*',
     initAuthConfig((c) => ({
-      secret: c.env.AUTH_SECRET,
+      secret: process.env.AUTH_SECRET,
       basePath: '/api/auth',
       pages: {
         signIn: '/account/signin',
@@ -288,6 +288,32 @@ app.all('/integrations/:path{.+}', async (c, next) => {
 
 app.use('/api/auth/*', async (c, next) => {
   if (isAuthAction(c.req.path)) {
+    const action = c.req.path.split('/').filter(Boolean).at(2);
+
+    if (!process.env.AUTH_SECRET) {
+      if (action === 'session') {
+        return c.json(null);
+      }
+
+      return c.json(
+        {
+          error:
+            'Auth belum dikonfigurasi. Set AUTH_SECRET sebelum memakai login atau signup.',
+        },
+        503
+      );
+    }
+
+    if (!process.env.DATABASE_URL && ['callback', 'signin'].includes(action || '')) {
+      return c.json(
+        {
+          error:
+            'Database belum dikonfigurasi. Set DATABASE_URL sebelum memakai login atau signup.',
+        },
+        503
+      );
+    }
+
     return authHandler()(c, next);
   }
   return next();

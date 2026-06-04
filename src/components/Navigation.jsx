@@ -7,11 +7,13 @@ import {
   Settings,
   LogOut,
   Mail,
+  Bot,
 } from "lucide-react";
 import useUser from "@/utils/useUser";
 
 const navItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard" },
+  { href: "/ai", icon: Bot, label: "AI Assistant" },
   { href: "/upload-cv", icon: Upload, label: "Upload CV" },
   { href: "/jobs", icon: Briefcase, label: "Jobs" },
   { href: "/applications", icon: ClipboardList, label: "Applications" },
