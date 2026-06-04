@@ -44,6 +44,7 @@ export async function GET(request) {
       SELECT
         c.id,
         c.file_url,
+        c.raw_text,
         c.parsed_json,
         c.audit_result,
         c.created_at,
@@ -61,6 +62,78 @@ export async function GET(request) {
     return Response.json({ cvs });
   } catch (error) {
     console.error("CV Fetch Error:", error);
+    return Response.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+export async function PATCH(request) {
+  try {
+    const session = await auth();
+    if (!session || !session.user?.id) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { cvId, rawText } = await request.json();
+    const cleanRawText = String(rawText || "").trim();
+
+    if (!cvId) {
+      return Response.json({ error: "CV ID is required" }, { status: 400 });
+    }
+
+    if (!cleanRawText) {
+      return Response.json(
+        { error: "Isi teks CV tidak boleh kosong" },
+        { status: 400 },
+      );
+    }
+
+    const user = await ensureAppUser(session);
+    const rows = await sql`
+      UPDATE cvs
+      SET raw_text = ${cleanRawText},
+          parsed_json = '{}'::jsonb,
+          audit_result = '{}'::jsonb
+      WHERE id = ${cvId} AND user_id = ${user.id}
+      RETURNING id, file_url, raw_text, parsed_json, audit_result, created_at
+    `;
+
+    if (rows.length === 0) {
+      return Response.json({ error: "CV not found" }, { status: 404 });
+    }
+
+    return Response.json({ cv: rows[0] });
+  } catch (error) {
+    console.error("CV Update Error:", error);
+    return Response.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request) {
+  try {
+    const session = await auth();
+    if (!session || !session.user?.id) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { cvId } = await request.json();
+    if (!cvId) {
+      return Response.json({ error: "CV ID is required" }, { status: 400 });
+    }
+
+    const user = await ensureAppUser(session);
+    const rows = await sql`
+      DELETE FROM cvs
+      WHERE id = ${cvId} AND user_id = ${user.id}
+      RETURNING id
+    `;
+
+    if (rows.length === 0) {
+      return Response.json({ error: "CV not found" }, { status: 404 });
+    }
+
+    return Response.json({ success: true, deletedCvId: rows[0].id });
+  } catch (error) {
+    console.error("CV Delete Error:", error);
     return Response.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

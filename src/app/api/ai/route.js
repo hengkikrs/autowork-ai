@@ -1,4 +1,7 @@
 import { generateOpenRouterText } from "@/app/api/utils/openRouter";
+import sql from "@/app/api/utils/sql";
+import { ensureAppUser } from "@/app/api/utils/appUser";
+import { auth } from "@/auth";
 
 const MODES = {
   career:
@@ -8,6 +11,49 @@ const MODES = {
   job:
     "Kamu adalah job description analyst AutoWork AI. Ekstrak requirement, hard skills, red flags, prioritas persiapan, dan rekomendasi apply. Jangan scraping dan jangan menyarankan bypass aturan platform kerja.",
 };
+
+function truncateForPrompt(value, limit) {
+  const text = String(value || "").trim();
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}\n\n[Dipendekkan agar konteks tetap aman diproses.]`;
+}
+
+async function getCvContext(cvId) {
+  if (!cvId) return null;
+
+  const session = await auth();
+  if (!session?.user?.id) {
+    const error = new Error("Unauthorized");
+    error.status = 401;
+    throw error;
+  }
+
+  const user = await ensureAppUser(session);
+  const rows = await sql`
+    SELECT id, raw_text, parsed_json, audit_result, created_at
+    FROM cvs
+    WHERE id = ${cvId} AND user_id = ${user.id}
+    LIMIT 1
+  `;
+
+  if (rows.length === 0) {
+    const error = new Error("CV tidak ditemukan.");
+    error.status = 404;
+    throw error;
+  }
+
+  const cv = rows[0];
+  return {
+    id: cv.id,
+    prompt: [
+      `CV tersimpan AutoWork AI #${cv.id}`,
+      `Tanggal upload: ${cv.created_at}`,
+      `Audit ATS:\n${truncateForPrompt(JSON.stringify(cv.audit_result || {}, null, 2), 3000)}`,
+      `Parsed CV:\n${truncateForPrompt(JSON.stringify(cv.parsed_json || {}, null, 2), 4000)}`,
+      `Teks CV:\n${truncateForPrompt(cv.raw_text || "", 7000)}`,
+    ].join("\n\n"),
+  };
+}
 
 export async function GET() {
   return Response.json({
@@ -37,10 +83,18 @@ export async function POST(request) {
       );
     }
 
+    const cvContext = await getCvContext(body.cvId);
+    const userContent = cvContext
+      ? `${cvContext.prompt}\n\nPertanyaan user:\n${message}`
+      : message;
+
     const result = await generateOpenRouterText({
       messages: [
-        { role: "system", content: MODES[mode] },
-        { role: "user", content: message },
+        {
+          role: "system",
+          content: `${MODES[mode]} Jika konteks CV tersimpan disertakan, gunakan konteks itu sebagai sumber utama dan jangan mengarang data di luar CV.`,
+        },
+        { role: "user", content: userContent },
       ],
       maxTokens: 1400,
     });
@@ -50,6 +104,7 @@ export async function POST(request) {
       model: result.model,
       usage: result.usage,
       mode,
+      cvId: cvContext?.id || null,
     });
   } catch (error) {
     console.error("AI assistant error:", error);
@@ -62,7 +117,7 @@ export async function POST(request) {
     }
 
     return Response.json(
-      { error: "AI assistant gagal memproses permintaan." },
+      { error: error?.message || "AI assistant gagal memproses permintaan." },
       { status: error?.status || 500 },
     );
   }

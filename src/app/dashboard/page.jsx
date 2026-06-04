@@ -18,6 +18,8 @@ import {
   BarChart3,
   Download,
   Loader2,
+  ArrowRight,
+  Bot,
 } from "lucide-react";
 
 async function fetchCVs() {
@@ -62,7 +64,9 @@ function StepIcon({ state }) {
 
 export default function DashboardPage() {
   const queryClient = useQueryClient();
-  const [autoRepairing, setAutoRepairing] = useState(false);
+  const [autoProcessingCv, setAutoProcessingCv] = useState(false);
+  const [autoProcessMode, setAutoProcessMode] = useState("");
+  const [autoProcessError, setAutoProcessError] = useState("");
   const { data: cvResponse, isLoading: loadingCV } = useQuery({
     queryKey: ["cvs"],
     queryFn: fetchCVs,
@@ -106,13 +110,28 @@ export default function DashboardPage() {
     ].includes(application.status),
   );
   const hasReportData = applications.length > 0;
+  const needsMoreCvText = Boolean(auditResult?.needs_user_text);
   const needsCvImprovement = auditReady && atsScore < 87;
-  const shouldAutoRepair =
+  const shouldAutoProcessCv =
     hasCv &&
-    auditReady &&
-    atsScore < 87 &&
-    !auditResult?.optimized_by_ai &&
-    !autoRepairing;
+    (!auditReady ||
+      (needsCvImprovement &&
+        !auditResult?.optimized_by_ai &&
+        !needsMoreCvText));
+  const aiCvStatus =
+    autoProcessingCv && autoProcessMode === "screening"
+      ? "AI sedang screening CV baru."
+      : autoProcessingCv
+        ? "AI sedang memperbaiki CV aktif."
+        : !hasCv
+          ? "Upload CV untuk mengaktifkan screening AI."
+          : !auditReady
+            ? "AI siap screening CV otomatis."
+            : needsMoreCvText
+              ? "AI butuh teks CV lebih lengkap sebelum auto-improve."
+              : needsCvImprovement
+                ? "AI akan memperbaiki CV karena skor di bawah 87%."
+                : "CV sudah lolos target ATS.";
   const activeStep =
     !hasCv
       ? "upload"
@@ -145,7 +164,9 @@ export default function DashboardPage() {
       title: "Screening CV ATS",
       description: auditReady
         ? `Audit selesai dengan skor ${atsScore}%.`
-        : "Menunggu hasil parsing dan audit ATS.",
+        : autoProcessingCv && autoProcessMode === "screening"
+          ? "AI sedang membaca file dan menghitung skor ATS."
+          : "AI akan parsing CV dan audit skor ATS otomatis.",
       icon: TrendingUp,
       state: getStepState(auditReady, activeStep === "screening"),
       href: "/dashboard",
@@ -153,7 +174,9 @@ export default function DashboardPage() {
     {
       key: "improve",
       title: "Perbaiki CV",
-      description: needsCvImprovement
+      description: needsMoreCvText
+        ? "Paste teks CV lengkap agar AI bisa rewrite dengan aman."
+        : needsCvImprovement
         ? "Ikuti rekomendasi utama sebelum matching."
         : auditResult?.optimized_by_ai
           ? "CV sudah diperbaiki otomatis dan menjadi CV aktif."
@@ -207,13 +230,51 @@ export default function DashboardPage() {
       href: "/reports",
     },
   ];
+  const aiAutomation = [
+    {
+      title: "CV Screening",
+      description: auditReady
+        ? `AI sudah menilai ATS ${atsScore}%.`
+        : hasCv
+          ? "AI screening berjalan otomatis di dashboard."
+          : "Aktif setelah CV diupload.",
+      icon: Bot,
+    },
+    {
+      title: "Auto Improve",
+      description: auditResult?.optimized_by_ai
+        ? "CV aktif sudah diganti versi ATS."
+        : needsCvImprovement
+          ? needsMoreCvText
+            ? "Butuh teks CV lengkap untuk rewrite aman."
+            : "AI akan memperbaiki skor di bawah 87%."
+          : "Tidak perlu rewrite saat skor sudah aman.",
+      icon: Wand2,
+    },
+    {
+      title: "Job Parser",
+      description: hasJobs
+        ? `${jobs.length} lowongan diproses dari job description.`
+        : "Paste lowongan, AI akan parsing requirement.",
+      icon: Search,
+    },
+    {
+      title: "Match & Report",
+      description: hasAnyMatch
+        ? `${matchedJobs} lowongan cocok 70%+ masuk pipeline.`
+        : "AI match score dan dokumen tailored mengisi report.",
+      icon: BarChart3,
+    },
+  ];
 
   useEffect(() => {
-    if (!shouldAutoRepair) return;
+    if (!shouldAutoProcessCv || autoProcessingCv) return;
 
     let cancelled = false;
-    async function repairCv() {
-      setAutoRepairing(true);
+    async function processCv() {
+      setAutoProcessMode(!auditReady ? "screening" : "improving");
+      setAutoProcessingCv(true);
+      setAutoProcessError("");
       try {
         const response = await fetch("/api/cv/process", {
           method: "POST",
@@ -221,25 +282,36 @@ export default function DashboardPage() {
           body: JSON.stringify({ cvId: cvData.id }),
         });
         if (!response.ok) {
-          throw new Error("Tidak bisa memperbaiki CV otomatis");
+          const body = await response.json().catch(() => ({}));
+          throw new Error(
+            body.error || "Tidak bisa menjalankan AI CV otomatis",
+          );
         }
         if (!cancelled) {
           queryClient.invalidateQueries({ queryKey: ["cvs"] });
         }
       } catch (error) {
         console.error(error);
+        if (!cancelled) {
+          setAutoProcessError(error.message);
+        }
       } finally {
         if (!cancelled) {
-          setAutoRepairing(false);
+          setAutoProcessingCv(false);
         }
       }
     }
 
-    repairCv();
+    processCv();
     return () => {
       cancelled = true;
     };
-  }, [shouldAutoRepair, cvData?.id, queryClient]);
+  }, [
+    shouldAutoProcessCv,
+    auditReady,
+    cvData?.id,
+    queryClient,
+  ]);
 
   if (loading) {
     return (
@@ -275,61 +347,69 @@ export default function DashboardPage() {
             </a>
           </header>
 
-          {!cvData ? (
-            <div className="bg-white p-12 rounded-3xl text-center shadow-xl border border-[#E2E8F0]">
-              <div className="h-20 w-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                <FileText className="h-10 w-10 text-blue-600" />
-              </div>
-              <h2 className="text-2xl font-bold text-[#1E293B] mb-4">
-                Belum ada CV
-              </h2>
-              <p className="text-[#64748B] mb-8 max-w-md mx-auto">
-                Upload CV untuk mulai audit ATS, parse profil, dan matching
-                lowongan.
-              </p>
-              <a
-                href="/upload-cv"
-                className="inline-block bg-[#2563EB] text-white px-10 py-4 rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-[#1D4ED8] transition-all"
-              >
-                Mulai Upload
-              </a>
-            </div>
-          ) : (
-            <div className="space-y-8">
+          <div className="space-y-8">
               <section className="bg-white p-6 rounded-3xl shadow-sm border border-[#E2E8F0]">
-                <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between mb-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between mb-6">
                   <div>
                     <h2 className="text-2xl font-black text-[#0F172A]">
                       Progress apply kerja
                     </h2>
                     <p className="text-[#64748B]">
-                      Alur kerja dari upload CV sampai laporan lamaran.
+                      Alur step-by-step dari upload CV sampai report.
                     </p>
+                    <div className="mt-3 inline-flex max-w-xl items-center gap-2 rounded-full bg-blue-50 px-4 py-2 text-sm font-bold text-[#1D4ED8]">
+                      {autoProcessingCv ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Bot className="h-4 w-4" />
+                      )}
+                      <span>{aiCvStatus}</span>
+                    </div>
                   </div>
                   <a
                     href="/upload-cv"
-                    className="text-[#2563EB] font-bold hover:text-[#1D4ED8]"
+                    className="inline-flex items-center gap-2 text-[#2563EB] font-bold hover:text-[#1D4ED8]"
                   >
-                    Update CV
+                    Update CV <ArrowRight className="h-4 w-4" />
                   </a>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
-                  {workflowSteps.map((step) => {
+                <div className="overflow-x-auto pb-2">
+                  <div className="flex min-w-[1120px]">
+                  {workflowSteps.map((step, index) => {
                     const Icon = step.icon;
+                    const isLast = index === workflowSteps.length - 1;
                     const stateClass =
                       step.state === "completed"
-                        ? "border-emerald-200 bg-emerald-50"
+                        ? "bg-emerald-50 text-emerald-900 ring-emerald-200"
                         : step.state === "active"
-                          ? "border-blue-200 bg-blue-50"
-                          : "border-[#E2E8F0] bg-white";
+                          ? "bg-blue-50 text-blue-950 ring-blue-200"
+                          : "bg-white text-slate-700 ring-[#E2E8F0]";
+                    const clipPath =
+                      index === 0
+                        ? "polygon(0 0, calc(100% - 24px) 0, 100% 50%, calc(100% - 24px) 100%, 0 100%)"
+                        : isLast
+                          ? "polygon(0 0, 100% 0, 100% 100%, 0 100%, 24px 50%)"
+                          : "polygon(0 0, calc(100% - 24px) 0, 100% 50%, calc(100% - 24px) 100%, 0 100%, 24px 50%)";
                     return (
                       <a
                         key={step.key}
                         href={step.href}
-                        className={`min-h-40 rounded-2xl border p-4 transition-all hover:border-[#2563EB] ${stateClass}`}
+                        style={{
+                          clipPath,
+                          marginLeft: index === 0 ? 0 : -14,
+                          zIndex: workflowSteps.length - index,
+                        }}
+                        className={`relative min-h-[168px] flex-1 px-7 py-5 ring-1 ring-inset transition-all hover:bg-blue-50 hover:text-blue-950 hover:ring-[#2563EB] ${
+                          index === 0 ? "pl-5" : "pl-10"
+                        } ${stateClass}`}
                       >
                         <div className="flex items-center justify-between">
-                          <Icon className="h-5 w-5 text-[#2563EB]" />
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-[#2563EB]">
+                              {String(index + 1).padStart(2, "0")}
+                            </span>
+                            <Icon className="h-5 w-5 text-[#2563EB]" />
+                          </div>
                           <StepIcon state={step.state} />
                         </div>
                         <h3 className="mt-4 text-sm font-black text-[#0F172A] leading-snug">
@@ -341,9 +421,58 @@ export default function DashboardPage() {
                       </a>
                     );
                   })}
+                  </div>
                 </div>
+                {autoProcessError && (
+                  <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+                    {autoProcessError}
+                  </div>
+                )}
               </section>
 
+              <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {aiAutomation.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <div
+                      key={item.title}
+                      className="bg-white rounded-3xl border border-[#E2E8F0] p-5 shadow-sm"
+                    >
+                      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50">
+                        <Icon className="h-5 w-5 text-[#2563EB]" />
+                      </div>
+                      <h3 className="font-black text-[#0F172A]">
+                        {item.title}
+                      </h3>
+                      <p className="mt-2 text-sm leading-6 text-[#64748B]">
+                        {item.description}
+                      </p>
+                    </div>
+                  );
+                })}
+              </section>
+
+              {!cvData ? (
+                <div className="bg-white p-12 rounded-3xl text-center shadow-xl border border-[#E2E8F0]">
+                  <div className="h-20 w-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <FileText className="h-10 w-10 text-blue-600" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-[#1E293B] mb-4">
+                    Belum ada CV
+                  </h2>
+                  <p className="text-[#64748B] mb-8 max-w-md mx-auto">
+                    Upload CV untuk mulai audit ATS, parse profil, dan matching
+                    lowongan.
+                  </p>
+                  <a
+                    href="/upload-cv"
+                    className="inline-block bg-[#2563EB] text-white px-10 py-4 rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-[#1D4ED8] transition-all"
+                  >
+                    Mulai Upload
+                  </a>
+                </div>
+              ) : (
+                <>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#E2E8F0]">
                   <p className="text-sm font-bold text-[#64748B]">ATS Score</p>
@@ -394,10 +523,18 @@ export default function DashboardPage() {
                       ? "sudah kuat untuk ATS."
                       : "masih perlu ditingkatkan."}
                   </p>
-                  {autoRepairing && (
+                  {autoProcessingCv && (
                     <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-2 text-sm font-bold text-[#2563EB]">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Memperbaiki CV otomatis
+                      {autoProcessMode === "screening"
+                        ? "Screening CV otomatis"
+                        : "Memperbaiki CV otomatis"}
+                    </div>
+                  )}
+                  {needsMoreCvText && (
+                    <div className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                      AI belum bisa rewrite otomatis karena teks CV yang terbaca
+                      belum lengkap.
                     </div>
                   )}
                   {optimizedCvUrl && (
@@ -466,8 +603,9 @@ export default function DashboardPage() {
                   </p>
                 </a>
               </div>
+                </>
+              )}
             </div>
-          )}
         </div>
       </main>
     </div>
