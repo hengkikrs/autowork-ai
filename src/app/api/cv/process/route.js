@@ -126,7 +126,6 @@ export async function POST(request) {
       audit_result: result.audit_result,
     });
   } catch (error) {
-    console.error("CV Processing Error:", error);
     if (error?.code === "OPENROUTER_NOT_CONFIGURED") {
       return Response.json(
         {
@@ -136,6 +135,7 @@ export async function POST(request) {
         { status: 503 },
       );
     }
+    console.error("CV Processing Error:", error);
     return Response.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
