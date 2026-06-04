@@ -101,6 +101,10 @@ export async function POST(request) {
     try {
       // Call AI to parse and audit. If the integration is temporarily down,
       // the CV record still gets a usable fallback audit instead of failing upload.
+      if (process.env.CV_AI_ENABLED !== "true") {
+        throw new Error("CV AI integration is disabled or not configured.");
+      }
+
       const aiResponse = await fetch(
         `${process.env.NEXT_PUBLIC_CREATE_APP_URL}/integrations/google-gemini-2-5-pro/`,
         {
@@ -265,7 +269,7 @@ export async function POST(request) {
       const aiData = await aiResponse.json();
       result = parseAiResult(aiData);
     } catch (aiError) {
-      console.warn("CV AI Processing Fallback:", aiError);
+      console.info("CV AI Processing Fallback:", aiError);
       usedFallback = true;
       result = buildFallbackResult(
         rawText,
