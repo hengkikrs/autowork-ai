@@ -265,7 +265,7 @@ export async function POST(request) {
       const aiData = await aiResponse.json();
       result = parseAiResult(aiData);
     } catch (aiError) {
-      console.error("CV AI Processing Fallback:", aiError);
+      console.warn("CV AI Processing Fallback:", aiError);
       usedFallback = true;
       result = buildFallbackResult(
         rawText,
