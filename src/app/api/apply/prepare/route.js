@@ -45,6 +45,13 @@ export async function POST(request) {
     const rows = await sql`
       INSERT INTO applications (user_id, job_id, cv_id, status, match_score, match_details, notes)
       VALUES (${user.id}, ${jobId}, ${cvId}, ${status}, ${match?.match_score || 0}, ${matchDetailsJson}::jsonb, ${notes})
+      ON CONFLICT (user_id, job_id, cv_id)
+      DO UPDATE SET
+        status = EXCLUDED.status,
+        match_score = EXCLUDED.match_score,
+        match_details = EXCLUDED.match_details,
+        notes = EXCLUDED.notes,
+        created_at = CURRENT_TIMESTAMP
       RETURNING *
     `;
 

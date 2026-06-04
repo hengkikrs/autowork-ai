@@ -1,5 +1,6 @@
 import sql from "@/app/api/utils/sql";
 import { ensureAppUser } from "@/app/api/utils/appUser";
+import { ensureUploadTable } from "@/app/api/utils/upload";
 import { auth } from "@/auth";
 
 export async function POST(request) {
@@ -37,11 +38,24 @@ export async function GET(request) {
     }
 
     const user = await ensureAppUser(session);
+    await ensureUploadTable();
+
     const cvs = await sql`
-      SELECT id, file_url, parsed_json, audit_result, created_at 
-      FROM cvs 
-      WHERE user_id = ${user.id} 
-      ORDER BY created_at DESC
+      SELECT
+        c.id,
+        c.file_url,
+        c.parsed_json,
+        c.audit_result,
+        c.created_at,
+        f.file_name,
+        f.mime_type,
+        f.size_bytes
+      FROM cvs c
+      LEFT JOIN cv_upload_files f
+        ON c.file_url = '/api/upload/' || f.id::text
+       AND f.owner_auth_user_id = ${session.user.id}
+      WHERE c.user_id = ${user.id}
+      ORDER BY c.created_at DESC
     `;
 
     return Response.json({ cvs });

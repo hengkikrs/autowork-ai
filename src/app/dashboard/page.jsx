@@ -8,6 +8,13 @@ import {
   Briefcase,
   ClipboardList,
   Settings,
+  CheckCircle2,
+  Circle,
+  Clock,
+  Search,
+  Wand2,
+  Send,
+  BarChart3,
 } from "lucide-react";
 
 async function fetchCVs() {
@@ -34,6 +41,22 @@ async function fetchApplications() {
   return response.json();
 }
 
+function getStepState(done, active) {
+  if (done) return "completed";
+  if (active) return "active";
+  return "waiting";
+}
+
+function StepIcon({ state }) {
+  if (state === "completed") {
+    return <CheckCircle2 className="h-5 w-5 text-emerald-600" />;
+  }
+  if (state === "active") {
+    return <Clock className="h-5 w-5 text-[#2563EB]" />;
+  }
+  return <Circle className="h-5 w-5 text-[#94A3B8]" />;
+}
+
 export default function DashboardPage() {
   const { data: cvResponse, isLoading: loadingCV } = useQuery({
     queryKey: ["cvs"],
@@ -50,12 +73,125 @@ export default function DashboardPage() {
   const jobs = jobResponse?.jobs || [];
   const applications = applicationResponse?.applications || [];
   const loading = loadingCV || loadingJobs || loadingApplications;
-  const atsScore = cvData?.audit_result?.ats_score || 0;
-  const recommendations = cvData?.audit_result?.recommendations || [];
+  const auditResult = cvData?.audit_result || {};
+  const atsScore = auditResult?.ats_score || 0;
+  const recommendations = auditResult?.recommendations || [];
+  const auditReady = Object.keys(auditResult || {}).length > 0;
+  const hasCv = Boolean(cvData);
+  const hasJobs = jobs.length > 0;
+  const hasAnyMatch = jobs.some((job) => job.match_score !== null && job.match_score !== undefined);
   const matchedJobs = jobs.filter((job) => job.match_score >= 70).length;
   const pendingApplications = applications.filter(
     (application) => application.status === "WAITING_USER_APPROVAL",
   ).length;
+  const hasTailoredDocument = applications.some((application) =>
+    ["TAILORED_CV_READY", "COVER_LETTER_READY", "WAITING_USER_APPROVAL"].includes(
+      application.status,
+    ) || application.tailored_cv_url || application.cover_letter_url,
+  );
+  const hasApplyActivity = applications.some((application) =>
+    [
+      "WAITING_USER_APPROVAL",
+      "NEEDS_MANUAL_ACTION",
+      "TAILORED_CV_READY",
+      "COVER_LETTER_READY",
+      "APPLIED",
+    ].includes(application.status),
+  );
+  const hasReportData = applications.length > 0;
+  const needsCvImprovement = auditReady && atsScore < 75;
+  const activeStep =
+    !hasCv
+      ? "upload"
+      : !auditReady
+        ? "screening"
+        : needsCvImprovement
+          ? "improve"
+          : !hasJobs
+            ? "jobs"
+            : !hasAnyMatch
+              ? "match"
+              : !hasTailoredDocument
+                ? "tailor"
+                : !hasApplyActivity
+                  ? "apply"
+                  : "report";
+  const workflowSteps = [
+    {
+      key: "upload",
+      title: "Upload CV",
+      description: hasCv
+        ? `CV #${cvData.id} sudah tersimpan.`
+        : "Upload PDF atau DOCX untuk memulai.",
+      icon: FileText,
+      state: getStepState(hasCv, activeStep === "upload"),
+      href: "/upload-cv",
+    },
+    {
+      key: "screening",
+      title: "Screening CV ATS",
+      description: auditReady
+        ? `Audit selesai dengan skor ${atsScore}%.`
+        : "Menunggu hasil parsing dan audit ATS.",
+      icon: TrendingUp,
+      state: getStepState(auditReady, activeStep === "screening"),
+      href: "/dashboard",
+    },
+    {
+      key: "improve",
+      title: "Perbaiki CV",
+      description: needsCvImprovement
+        ? "Ikuti rekomendasi utama sebelum matching."
+        : auditReady
+          ? "CV sudah cukup untuk mulai matching."
+          : "Rekomendasi muncul setelah screening.",
+      icon: Wand2,
+      state: getStepState(auditReady && !needsCvImprovement, activeStep === "improve"),
+      href: "/dashboard",
+    },
+    {
+      key: "jobs",
+      title: "Cari lowongan sesuai",
+      description: hasJobs
+        ? `${jobs.length} lowongan sudah tersedia.`
+        : "Tambah lowongan atau job description target.",
+      icon: Search,
+      state: getStepState(hasJobs, activeStep === "jobs"),
+      href: "/jobs",
+    },
+    {
+      key: "tailor",
+      title: "Sesuaikan CV dengan lowongan",
+      description: hasTailoredDocument
+        ? "Tailored CV atau cover letter sudah dibuat."
+        : hasAnyMatch
+          ? "Pilih lowongan cocok lalu buat dokumen tailored."
+          : "Hitung match score untuk menentukan prioritas.",
+      icon: Briefcase,
+      state: getStepState(hasTailoredDocument, activeStep === "match" || activeStep === "tailor"),
+      href: "/jobs",
+    },
+    {
+      key: "apply",
+      title: "Apply",
+      description: hasApplyActivity
+        ? `${applications.length} lamaran masuk tracking.`
+        : "Siapkan dokumen dan submit manual dengan aman.",
+      icon: Send,
+      state: getStepState(hasApplyActivity, activeStep === "apply"),
+      href: "/applications",
+    },
+    {
+      key: "report",
+      title: "Report",
+      description: hasReportData
+        ? "Ringkasan lamaran siap dilihat."
+        : "Report aktif setelah ada tracking lamaran.",
+      icon: BarChart3,
+      state: getStepState(hasReportData, activeStep === "report"),
+      href: "/reports",
+    },
+  ];
 
   if (loading) {
     return (
@@ -112,6 +248,54 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-8">
+              <section className="bg-white p-6 rounded-3xl shadow-sm border border-[#E2E8F0]">
+                <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between mb-6">
+                  <div>
+                    <h2 className="text-2xl font-black text-[#0F172A]">
+                      Progress apply kerja
+                    </h2>
+                    <p className="text-[#64748B]">
+                      Alur kerja dari upload CV sampai laporan lamaran.
+                    </p>
+                  </div>
+                  <a
+                    href="/upload-cv"
+                    className="text-[#2563EB] font-bold hover:text-[#1D4ED8]"
+                  >
+                    Update CV
+                  </a>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+                  {workflowSteps.map((step) => {
+                    const Icon = step.icon;
+                    const stateClass =
+                      step.state === "completed"
+                        ? "border-emerald-200 bg-emerald-50"
+                        : step.state === "active"
+                          ? "border-blue-200 bg-blue-50"
+                          : "border-[#E2E8F0] bg-white";
+                    return (
+                      <a
+                        key={step.key}
+                        href={step.href}
+                        className={`min-h-40 rounded-2xl border p-4 transition-all hover:border-[#2563EB] ${stateClass}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <Icon className="h-5 w-5 text-[#2563EB]" />
+                          <StepIcon state={step.state} />
+                        </div>
+                        <h3 className="mt-4 text-sm font-black text-[#0F172A] leading-snug">
+                          {step.title}
+                        </h3>
+                        <p className="mt-2 text-xs text-[#64748B] leading-relaxed">
+                          {step.description}
+                        </p>
+                      </a>
+                    );
+                  })}
+                </div>
+              </section>
+
               <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#E2E8F0]">
                   <p className="text-sm font-bold text-[#64748B]">ATS Score</p>

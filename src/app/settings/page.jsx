@@ -3,7 +3,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Navigation from "@/components/Navigation";
-import { Save, Settings as SettingsIcon } from "lucide-react";
+import {
+  CalendarDays,
+  Download,
+  FileText,
+  HardDrive,
+  Save,
+  Settings as SettingsIcon,
+} from "lucide-react";
 
 async function fetchPreferences() {
   const response = await fetch("/api/preferences");
@@ -13,11 +20,34 @@ async function fetchPreferences() {
   return response.json();
 }
 
+async function fetchCVs() {
+  const response = await fetch("/api/cv");
+  if (!response.ok) {
+    throw new Error("Tidak bisa mengambil file CV");
+  }
+  return response.json();
+}
+
 function splitText(value) {
   return value
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function formatBytes(bytes) {
+  if (!bytes) return "Ukuran tidak tersedia";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("id-ID", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
 export default function SettingsPage() {
@@ -38,6 +68,15 @@ export default function SettingsPage() {
     queryKey: ["preferences"],
     queryFn: fetchPreferences,
   });
+  const {
+    data: cvData,
+    isLoading: loadingCVs,
+    error: cvError,
+  } = useQuery({
+    queryKey: ["cvs"],
+    queryFn: fetchCVs,
+  });
+  const cvs = cvData?.cvs || [];
 
   useEffect(() => {
     const preferences = data?.preferences;
@@ -239,6 +278,96 @@ export default function SettingsPage() {
             >
               <Save className="h-5 w-5" /> Simpan Preferensi
             </button>
+          </section>
+
+          <section className="bg-white rounded-3xl p-8 border border-[#E2E8F0] shadow-sm">
+            <div className="flex items-center justify-between gap-4 mb-8">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-2xl bg-blue-50 flex items-center justify-center">
+                  <FileText className="h-6 w-6 text-[#2563EB]" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-[#0F172A]">
+                    File CV yang diupload
+                  </h2>
+                  <p className="text-[#64748B]">
+                    Semua file CV tersimpan dan hanya bisa dibuka saat login.
+                  </p>
+                </div>
+              </div>
+              <a
+                href="/upload-cv"
+                className="rounded-xl bg-[#2563EB] px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-200 hover:bg-[#1D4ED8]"
+              >
+                Upload CV
+              </a>
+            </div>
+
+            {cvError && (
+              <div className="rounded-2xl bg-red-50 border border-red-100 p-4 text-red-700 font-medium">
+                {cvError.message}
+              </div>
+            )}
+
+            {loadingCVs ? (
+              <div className="rounded-2xl border border-[#E2E8F0] p-6 text-center text-[#64748B]">
+                Memuat file CV...
+              </div>
+            ) : cvs.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-[#CBD5E1] p-8 text-center">
+                <FileText className="h-10 w-10 text-[#2563EB] mx-auto mb-3" />
+                <h3 className="text-lg font-black text-[#0F172A]">
+                  Belum ada file CV
+                </h3>
+                <p className="text-[#64748B] mt-1">
+                  Upload CV pertama untuk memulai screening ATS.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-[#E2E8F0] rounded-2xl border border-[#E2E8F0] overflow-hidden">
+                {cvs.map((cv) => {
+                  const score = cv.audit_result?.ats_score;
+                  const fileName = cv.file_name || `CV #${cv.id}`;
+                  return (
+                    <div
+                      key={cv.id}
+                      className="p-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-5 w-5 flex-shrink-0 text-[#2563EB]" />
+                          <h3 className="truncate text-lg font-black text-[#0F172A]">
+                            {fileName}
+                          </h3>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-3 text-sm text-[#64748B]">
+                          <span className="inline-flex items-center gap-1">
+                            <CalendarDays className="h-4 w-4" />
+                            {formatDate(cv.created_at)}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <HardDrive className="h-4 w-4" />
+                            {formatBytes(cv.size_bytes)}
+                          </span>
+                          <span className="font-bold text-[#0F172A]">
+                            ATS {typeof score === "number" ? `${score}%` : "belum ada"}
+                          </span>
+                        </div>
+                      </div>
+                      <a
+                        href={cv.file_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#CBD5E1] px-4 py-3 text-sm font-bold text-[#0F172A] hover:border-[#2563EB] hover:text-[#2563EB]"
+                      >
+                        <Download className="h-4 w-4" />
+                        Buka file
+                      </a>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </section>
         </div>
       </main>

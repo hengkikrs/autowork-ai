@@ -123,5 +123,5 @@ async function upload({ url, buffer, base64, fileName, mimeType, prefix }) {
   };
 }
 
-export { upload };
+export { upload, ensureUploadTable };
 export default upload;
