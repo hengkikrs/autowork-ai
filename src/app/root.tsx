@@ -42,6 +42,34 @@ if (globalThis.window && globalThis.window !== undefined) {
 }
 
 const LoadFontsSSR = import.meta.env.SSR ? LoadFonts : null;
+const preHydrationDomCleanup = `
+(function () {
+  function cleanHtmlChildren() {
+    var root = document.documentElement;
+    if (!root) return;
+    Array.prototype.slice.call(root.children).forEach(function (node) {
+      var tag = node.tagName;
+      if (tag !== 'HEAD' && tag !== 'BODY') {
+        node.remove();
+      }
+    });
+  }
+  cleanHtmlChildren();
+  if (window.__autoworkHtmlChildObserver || typeof MutationObserver === 'undefined') {
+    return;
+  }
+  window.__autoworkHtmlChildObserver = new MutationObserver(cleanHtmlChildren);
+  window.__autoworkHtmlChildObserver.observe(document.documentElement, { childList: true });
+  window.addEventListener('load', function () {
+    window.setTimeout(function () {
+      if (window.__autoworkHtmlChildObserver) {
+        window.__autoworkHtmlChildObserver.disconnect();
+        window.__autoworkHtmlChildObserver = null;
+      }
+    }, 5000);
+  }, { once: true });
+})();
+`;
 if (import.meta.hot) {
   import.meta.hot.on('update-font-links', (urls: string[]) => {
     // remove old font links
@@ -437,6 +465,7 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: preHydrationDomCleanup }} />
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
@@ -451,6 +480,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <ClientOnly loader={() => children} />
         <Toaster position={isMobile ? 'top-center' : 'bottom-right'} />
         <ScrollRestoration />
+        <script dangerouslySetInnerHTML={{ __html: preHydrationDomCleanup }} />
         <Scripts />
         <link rel="preconnect" href="https://ka-p.fontawesome.com" crossOrigin="anonymous" />
         <link rel="stylesheet" href="https://ka-p.fontawesome.com/releases/v6.3.0/css/pro.min.css?token=2c15cc0cc7" crossOrigin="anonymous" />

@@ -9,6 +9,7 @@ import {
   Mail,
   Bot,
 } from "lucide-react";
+import { useLocation } from "react-router";
 import useUser from "@/utils/useUser";
 
 const navItems = [
@@ -23,9 +24,8 @@ const navItems = [
 
 export default function Navigation() {
   const { data: user } = useUser();
-  // Using window.location.pathname for active state
-  const pathname =
-    typeof window !== "undefined" ? window.location.pathname : "";
+  const location = useLocation();
+  const pathname = location?.pathname || "";
 
   return (
     <div className="flex h-screen w-64 flex-col bg-[#0F172A] text-white fixed left-0 top-0">
