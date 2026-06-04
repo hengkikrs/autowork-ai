@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import upload from "@/app/api/utils/upload";
 
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 function isAllowedMimeType(mimeType) {
   return [
@@ -28,7 +28,7 @@ export async function POST(request) {
       }
 
       if (file.size > MAX_UPLOAD_BYTES) {
-        return Response.json({ error: "File too large" }, { status: 413 });
+        return Response.json({ error: "File too large. Max 4MB." }, { status: 413 });
       }
 
       if (!isAllowedMimeType(file.type)) {
@@ -38,11 +38,20 @@ export async function POST(request) {
       const arrayBuffer = await file.arrayBuffer();
       const result = await upload({
         buffer: Buffer.from(arrayBuffer),
+        fileName: file.name,
+        mimeType: file.type,
+        prefix: session.user.id,
       });
+
+      if (!result.url) {
+        throw new Error("Upload provider did not return a file URL.");
+      }
 
       return Response.json({
         url: result.url,
         mimeType: result.mimeType || file.type,
+        path: result.path,
+        bucket: result.bucket,
       });
     }
 
@@ -51,19 +60,31 @@ export async function POST(request) {
       const result = await upload({
         url: body.url,
         base64: body.base64,
+        fileName: body.fileName,
+        mimeType: body.mimeType,
+        prefix: session.user.id,
       });
+
+      if (!result.url) {
+        throw new Error("Upload provider did not return a file URL.");
+      }
 
       return Response.json(result);
     }
 
     const arrayBuffer = await request.arrayBuffer();
     if (arrayBuffer.byteLength > MAX_UPLOAD_BYTES) {
-      return Response.json({ error: "File too large" }, { status: 413 });
+      return Response.json({ error: "File too large. Max 4MB." }, { status: 413 });
     }
 
     const result = await upload({
       buffer: Buffer.from(arrayBuffer),
+      prefix: session.user.id,
     });
+
+    if (!result.url) {
+      throw new Error("Upload provider did not return a file URL.");
+    }
 
     return Response.json(result);
   } catch (error) {

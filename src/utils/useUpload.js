@@ -39,12 +39,22 @@ function useUpload() {
         });
       }
       if (!response.ok) {
+        let message = "Upload failed";
+        try {
+          const data = await response.json();
+          message = data.error || message;
+        } catch {
+          // Keep the default message if the server did not send JSON.
+        }
         if (response.status === 413) {
           throw new Error("Upload failed: File too large.");
         }
-        throw new Error("Upload failed");
+        throw new Error(message);
       }
       const data = await response.json();
+      if (!data.url) {
+        throw new Error(data.error || "Upload failed: File URL is missing.");
+      }
       return { url: data.url, mimeType: data.mimeType || null };
     } catch (uploadError) {
       if (uploadError instanceof Error) {

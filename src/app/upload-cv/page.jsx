@@ -29,7 +29,7 @@ export default function UploadCVPage() {
         const allowedExtension =
           file.name.toLowerCase().endsWith(".pdf") ||
           file.name.toLowerCase().endsWith(".docx");
-        const maxSize = 10 * 1024 * 1024;
+        const maxSize = 4 * 1024 * 1024;
 
         if (!allowedTypes.includes(file.type) && !allowedExtension) {
           setError("Format file harus PDF atau DOCX.");
@@ -37,12 +37,13 @@ export default function UploadCVPage() {
         }
 
         if (file.size > maxSize) {
-          setError("Ukuran file maksimal 10MB.");
+          setError("Ukuran file maksimal 4MB.");
           return;
         }
 
         const { url, error: uploadError } = await upload({ file });
         if (uploadError) throw new Error(uploadError);
+        if (!url) throw new Error("Upload berhasil tapi URL file tidak tersedia.");
 
         setProcessing(true);
         const rawText = rawTextInput.trim()
@@ -73,7 +74,7 @@ export default function UploadCVPage() {
         }
       } catch (err) {
         console.error(err);
-        setError("Gagal upload atau proses CV. Coba lagi ya.");
+        setError(err?.message || "Gagal upload atau proses CV. Coba lagi ya.");
       } finally {
         setProcessing(false);
       }
@@ -105,7 +106,7 @@ export default function UploadCVPage() {
             <h2 className="text-2xl font-bold text-[#1E293B] mb-2">
               Drag and drop your CV here
             </h2>
-            <p className="text-[#64748B] mb-8">Support PDF, DOCX (Max 10MB)</p>
+            <p className="text-[#64748B] mb-8">Support PDF, DOCX (Max 4MB)</p>
 
             <label className="cursor-pointer bg-[#2563EB] text-white px-8 py-4 rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-[#1D4ED8] transition-all inline-flex items-center space-x-2">
               <FileText className="h-5 w-5" />
